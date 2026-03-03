@@ -1,10 +1,10 @@
 export default function HomePage() {
   return (
-    <main className="mx-auto max-w-3xl p-8 space-y-6">
+    <main className="mx-auto max-w-3xl space-y-6 p-8">
       <h1 className="text-4xl font-bold">Job Tracker</h1>
       <p className="text-gray-600">
-        A workspace-ready job application tracker for individuals, friends,
-        and universities.
+        A workspace-ready job application tracker for individuals, friends, and
+        universities.
       </p>
 
       <a
