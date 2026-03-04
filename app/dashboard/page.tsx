@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { WorkspaceRow } from './WorkspaceRow';
 
 async function createWorkspace(formData: FormData): Promise<void> {
   'use server';
@@ -133,15 +134,11 @@ export default async function DashboardPage({
         )}
 
         {workspaces.map((workspace) => (
-          <div
+          <WorkspaceRow
             key={workspace.id}
-            className="flex justify-between rounded-md border p-3"
-          >
-            <span>{workspace.name}</span>
-            <span className="text-sm text-gray-500">
-              {workspace.inviteCode.slice(0, 8)}
-            </span>
-          </div>
+            name={workspace.name}
+            inviteCode={workspace.inviteCode}
+          />
         ))}
       </div>
     </main>
