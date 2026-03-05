@@ -136,6 +136,7 @@ export default async function DashboardPage({
         {workspaces.map((workspace) => (
           <WorkspaceRow
             key={workspace.id}
+            id={workspace.id}
             name={workspace.name}
             inviteCode={workspace.inviteCode}
           />
