@@ -21,6 +21,27 @@ async function updateStatus(
 
   revalidatePath(`/workspaces/${workspaceId}/applications`);
 }
+
+function statusLabel(status: string) {
+  switch (status) {
+    case 'APPLIED':
+      return 'Applied';
+    case 'OA':
+      return 'OA';
+    case 'SCREEN':
+      return 'Screen';
+    case 'INTERVIEW':
+      return 'Interview';
+    case 'OFFER':
+      return 'Offer';
+    case 'REJECTED':
+      return 'Rejected';
+    case 'WITHDRAWN':
+      return 'Withdrawn';
+    default:
+      return status;
+  }
+}
 async function createApplication(
   workspaceId: string,
   formData: FormData,
@@ -75,6 +96,7 @@ export default async function WorkspaceApplicationsPage({
   const { workspaceId } = await params;
   const sp = (await searchParams) ?? {};
   const msg = Array.isArray(sp.msg) ? sp.msg[0] : sp.msg;
+  const statusFilter = Array.isArray(sp.status) ? sp.status[0] : sp.status;
 
   // Verify workspace exists (otherwise 404)
   const workspace = await prisma.workspace.findUnique({
@@ -86,7 +108,10 @@ export default async function WorkspaceApplicationsPage({
 
   // Fetch applications in this workspace
   const applications = await prisma.application.findMany({
-    where: { workspaceId },
+    where: {
+      workspaceId,
+      ...(statusFilter ? { status: statusFilter as any } : {}),
+    },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -162,7 +187,37 @@ export default async function WorkspaceApplicationsPage({
           Add application
         </button>
       </form>
+      {/*Filter Tabs*/}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          className={`rounded-md border px-3 py-1 text-sm ${
+            !statusFilter ? 'bg-black text-white' : ''
+          }`}
+          href={`/workspaces/${workspaceId}/applications`}
+        >
+          All
+        </Link>
 
+        {[
+          'APPLIED',
+          'OA',
+          'SCREEN',
+          'INTERVIEW',
+          'OFFER',
+          'REJECTED',
+          'WITHDRAWN',
+        ].map((s) => (
+          <Link
+            key={s}
+            className={`rounded-md border px-3 py-1 text-sm ${
+              statusFilter === s ? 'bg-black text-white' : ''
+            }`}
+            href={`/workspaces/${workspaceId}/applications?status=${s}`}
+          >
+            {s}
+          </Link>
+        ))}
+      </div>
       {/* Applications List */}
       <section className="space-y-2">
         <h2 className="text-lg font-medium">Latest</h2>
@@ -180,19 +235,19 @@ export default async function WorkspaceApplicationsPage({
                   <div className="truncate font-medium">
                     {app.company} — {app.roleTitle}
                   </div>
-                  <div className="text-sm text-gray-500">
-                    Status: {app.status}
-                  </div>
 
-                  
-                    <form
-                      action={async (formData) => {
-                        'use server';
-                        await updateStatus(workspaceId, app.id, formData);
-                      }}
-                    >
-                      <StatusSelect currentStatus={app.status} />
-                    </form>
+                  <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs">
+                    {statusLabel(app.status)}
+                  </span>
+
+                  <form
+                    action={async (formData) => {
+                      'use server';
+                      await updateStatus(workspaceId, app.id, formData);
+                    }}
+                  >
+                    <StatusSelect currentStatus={app.status} />
+                  </form>
 
                   {app.jobUrl && (
                     <a
