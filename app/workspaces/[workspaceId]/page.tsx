@@ -18,15 +18,22 @@ export default async function WorkspacePage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-8 space-y-6">
+    <main className="mx-auto max-w-5xl space-y-6 p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{workspace.name}</h1>
         <Link className="text-sm underline" href="/dashboard">
           Back to dashboard
         </Link>
+
+        <Link
+          className="rounded-md border px-3 py-2 text-sm"
+          href={`/workspaces/${workspaceId}/applications`}
+        >
+          Applications
+        </Link>
       </div>
 
-      <div className="border rounded-md p-4 space-y-1">
+      <div className="space-y-1 rounded-md border p-4">
         <div className="text-sm text-gray-500">Invite code</div>
         <div className="font-mono">{workspace.inviteCode}</div>
       </div>
