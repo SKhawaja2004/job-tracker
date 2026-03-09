@@ -1,16 +1,30 @@
+import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
+import { requireDbUser } from '@/lib/auth';
+import {
+  isValidInviteCode,
+  isValidWorkspaceName,
+  parseRequiredText,
+} from '@/lib/validation';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { WorkspaceRow } from './WorkspaceRow';
 
+export const metadata: Metadata = {
+  title: 'Dashboard',
+  description: 'Manage workspaces and invite members to collaborate.',
+};
+
 async function createWorkspace(formData: FormData): Promise<void> {
   'use server';
 
-  const rawName = formData.get('name');
-  const name = typeof rawName === 'string' ? rawName.trim() : '';
+  const dbUser = await requireDbUser();
+  if (!dbUser) redirect('/sign-in');
 
-  if (!name) {
-    redirect('/dashboard?msg=Please%20enter%20a%20workspace%20name');
+  const name = parseRequiredText(formData, 'name');
+
+  if (!isValidWorkspaceName(name)) {
+    redirect('/dashboard?msg=Workspace%20name%20must%20be%202-80%20chars');
   }
 
   const existing = await prisma.workspace.findFirst({
@@ -26,6 +40,12 @@ async function createWorkspace(formData: FormData): Promise<void> {
     data: {
       name,
       inviteCode: crypto.randomUUID(),
+      memberships: {
+        create: {
+          userId: dbUser.id,
+          role: 'OWNER',
+        },
+      },
     },
   });
 
@@ -36,11 +56,13 @@ async function createWorkspace(formData: FormData): Promise<void> {
 async function joinWorkspace(formData: FormData): Promise<void> {
   'use server';
 
-  const rawCode = formData.get('inviteCode');
-  const inviteCode = typeof rawCode === 'string' ? rawCode.trim() : '';
+  const dbUser = await requireDbUser();
+  if (!dbUser) redirect('/sign-in');
 
-  if (!inviteCode) {
-    redirect('/dashboard?msg=Please%20enter%20an%20invite%20code');
+  const inviteCode = parseRequiredText(formData, 'inviteCode');
+
+  if (!isValidInviteCode(inviteCode)) {
+    redirect('/dashboard?msg=Please%20enter%20a%20valid%20invite%20code');
   }
 
   const workspace = await prisma.workspace.findUnique({
@@ -52,22 +74,16 @@ async function joinWorkspace(formData: FormData): Promise<void> {
     redirect('/dashboard?msg=Invite%20code%20not%20found');
   }
 
-  const userId = process.env.DEMO_USER_ID;
-  if (!userId) {
-    redirect('/dashboard?msg=Missing%20DEMO_USER_ID%20in%20.env');
-  }
-
-  // create membership if it doesn't already exist
   await prisma.membership.upsert({
     where: {
       userId_workspaceId: {
-        userId,
+        userId: dbUser.id,
         workspaceId: workspace.id,
       },
     },
     update: {},
     create: {
-      userId,
+      userId: dbUser.id,
       workspaceId: workspace.id,
       role: 'MEMBER',
     },
@@ -85,62 +101,110 @@ export default async function DashboardPage({
   const sp = (await searchParams) ?? {};
   const msg = Array.isArray(sp.msg) ? sp.msg[0] : sp.msg;
 
-  const workspaces = await prisma.workspace.findMany({
-    orderBy: { createdAt: 'desc' },
+  const dbUser = await requireDbUser();
+  if (!dbUser) redirect('/sign-in');
+
+  const orphanWorkspaces = await prisma.workspace.findMany({
+    where: { memberships: { none: {} } },
+    select: { id: true },
+  });
+
+  if (orphanWorkspaces.length > 0) {
+    await prisma.membership.createMany({
+      data: orphanWorkspaces.map((workspace) => ({
+        userId: dbUser.id,
+        workspaceId: workspace.id,
+        role: 'OWNER',
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  const memberships = await prisma.membership.findMany({
+    where: { userId: dbUser.id },
+    orderBy: { workspace: { createdAt: 'desc' } },
+    select: {
+      role: true,
+      workspace: {
+        select: {
+          id: true,
+          name: true,
+          inviteCode: true,
+          createdAt: true,
+        },
+      },
+    },
   });
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+    <main className="page">
+      <div className="container space-y-6">
+        <section className="card p-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-muted mt-2 text-sm">
+            Manage your workspaces and collaboration access.
+          </p>
+        </section>
 
-      <form action={createWorkspace} className="flex gap-2">
-        <input
-          type="text"
-          name="name"
-          placeholder="Workspace name"
-          className="w-full rounded-md border px-3 py-2"
-          required
-        />
-        <button
-          type="submit"
-          className="rounded-md bg-black px-4 py-2 text-white"
-        >
-          Create
-        </button>
-      </form>
-
-      <form action={joinWorkspace} className="flex gap-2">
-        <input
-          type="text"
-          name="inviteCode"
-          placeholder="Invite code"
-          className="w-full rounded-md border px-3 py-2"
-          required
-        />
-        <button type="submit" className="rounded-md border px-4 py-2">
-          Join
-        </button>
-      </form>
-
-      {msg && (
-        <p className="text-sm text-gray-600">{decodeURIComponent(msg)}</p>
-      )}
-
-      <div className="space-y-2">
-        <h2 className="text-lg font-medium">Workspaces</h2>
-
-        {workspaces.length === 0 && (
-          <p className="text-gray-500">No workspaces yet</p>
+        {msg && (
+          <p className="card p-3 text-sm">{decodeURIComponent(msg)}</p>
         )}
 
-        {workspaces.map((workspace) => (
-          <WorkspaceRow
-            key={workspace.id}
-            id={workspace.id}
-            name={workspace.name}
-            inviteCode={workspace.inviteCode}
-          />
-        ))}
+        <section className="grid gap-4 lg:grid-cols-2">
+          <form action={createWorkspace} className="card space-y-3 p-5">
+            <h2 className="text-sm font-semibold">Create workspace</h2>
+            <input
+              type="text"
+              name="name"
+              placeholder="Workspace name"
+              className="input"
+              required
+            />
+            <button type="submit" className="btn-primary w-full px-4 py-2.5 text-sm">
+              Create
+            </button>
+          </form>
+
+          <form action={joinWorkspace} className="card space-y-3 p-5">
+            <h2 className="text-sm font-semibold">Join workspace</h2>
+            <input
+              type="text"
+              name="inviteCode"
+              placeholder="Invite code"
+              className="input"
+              required
+            />
+            <button type="submit" className="btn-secondary w-full px-4 py-2.5 text-sm">
+              Join
+            </button>
+          </form>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Workspaces</h2>
+            <span className="text-muted text-sm">{memberships.length}</span>
+          </div>
+
+          {memberships.length === 0 ? (
+            <div className="card p-6 text-sm text-muted">
+              No workspaces yet.
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {memberships.map((membership) => (
+                <WorkspaceRow
+                  key={membership.workspace.id}
+                  id={membership.workspace.id}
+                  name={membership.workspace.name}
+                  inviteCode={membership.workspace.inviteCode}
+                  role={membership.role}
+                  createdAt={membership.workspace.createdAt.toISOString()}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

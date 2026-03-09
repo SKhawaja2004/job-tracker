@@ -5,7 +5,12 @@ export function StatusSelect({ currentStatus }: { currentStatus: string }) {
     <select
       name="status"
       defaultValue={currentStatus}
-      className="rounded border px-2 py-1 text-sm"
+      className="input select-clean rounded-sm"
+      style={{
+        WebkitAppearance: 'none',
+        appearance: 'none',
+        backgroundColor: '#0f131a',
+      }}
       onChange={(e) => e.currentTarget.form?.requestSubmit()}
     >
       <option value="APPLIED">Applied</option>
