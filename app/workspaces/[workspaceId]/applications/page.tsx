@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -85,7 +86,15 @@ async function updateStatus(
     data: { status },
   });
 
+  const redirectToRaw = formData.get('redirectTo');
+  const redirectTo =
+    typeof redirectToRaw === 'string' &&
+    redirectToRaw.startsWith(`/workspaces/${workspaceId}/applications`)
+      ? redirectToRaw
+      : `/workspaces/${workspaceId}/applications`;
+
   revalidatePath(`/workspaces/${workspaceId}/applications`);
+  redirect(redirectTo);
 }
 
 async function createApplication(
@@ -147,24 +156,6 @@ function statusLabel(status: ApplicationStatus): string {
       return 'Rejected';
     case 'WITHDRAWN':
       return 'Withdrawn';
-  }
-}
-
-function statusTone(status: ApplicationStatus): string {
-  switch (status) {
-    case 'OFFER':
-      return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40';
-    case 'REJECTED':
-      return 'bg-rose-500/15 text-rose-300 border-rose-500/40';
-    case 'INTERVIEW':
-    case 'SCREEN':
-      return 'bg-blue-500/15 text-blue-300 border-blue-500/40';
-    case 'OA':
-      return 'bg-violet-500/15 text-violet-300 border-violet-500/40';
-    case 'WITHDRAWN':
-      return 'bg-slate-500/20 text-slate-300 border-slate-500/40';
-    default:
-      return 'bg-amber-500/15 text-amber-300 border-amber-500/40';
   }
 }
 
@@ -230,7 +221,13 @@ export default async function WorkspaceApplicationsPage({
   const rejectedCount = totalsByStatus.REJECTED ?? 0;
   const rowGridStyle = {
     gridTemplateColumns: '1.35fr 1.2fr 1fr 0.8fr 0.65fr',
-  } as const;
+  } as CSSProperties;
+  const toolbarGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(320px, 1fr) 180px 110px',
+    gap: '0.5rem',
+    minWidth: '620px',
+  } as CSSProperties;
 
   return (
     <main className="page">
@@ -344,31 +341,33 @@ export default async function WorkspaceApplicationsPage({
               ))}
             </div>
 
-            <form className="grid w-full gap-2 md:grid-cols-3" method="get">
-              <input
-                type="text"
-                name="q"
-                defaultValue={searchQuery}
-                placeholder="Search company or role"
-                className="input"
-              />
-              <select
-                name="status"
-                defaultValue={parsedStatusFilter ?? ''}
-                className="input select-clean"
-                style={{ WebkitAppearance: 'none', appearance: 'none' }}
-              >
-                <option value="">All statuses</option>
-                {STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {statusLabel(status)}
-                  </option>
-                ))}
-              </select>
-              <button type="submit" className="btn-secondary px-3 py-2 text-sm">
-                Apply
-              </button>
-            </form>
+            <div className="w-full overflow-x-auto">
+              <form style={toolbarGridStyle} method="get">
+                <input
+                  type="text"
+                  name="q"
+                  defaultValue={searchQuery}
+                  placeholder="Search company or role"
+                  className="input"
+                />
+                <select
+                  name="status"
+                  defaultValue={parsedStatusFilter ?? ''}
+                  className="input select-clean"
+                  style={{ WebkitAppearance: 'none', appearance: 'none' }}
+                >
+                  <option value="">All statuses</option>
+                  {STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {statusLabel(status)}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="btn-secondary px-3 py-2 text-sm">
+                  Apply
+                </button>
+              </form>
+            </div>
           </div>
         </section>
 
@@ -379,8 +378,8 @@ export default async function WorkspaceApplicationsPage({
             <div className="overflow-x-auto">
               <div className="min-w-[980px] space-y-2">
                 <div
-                  className="grid gap-4 px-4 py-2 text-xs font-semibold tracking-wide text-slate-400 uppercase"
-                  style={rowGridStyle}
+                  className="px-4 py-2 text-xs font-semibold tracking-wide text-slate-400 uppercase"
+                  style={{ ...rowGridStyle, display: 'grid', columnGap: '1rem' }}
                 >
                   <div>Company</div>
                   <div>Role</div>
@@ -394,7 +393,14 @@ export default async function WorkspaceApplicationsPage({
                     key={app.id}
                     className="rounded-lg border border-slate-700 bg-slate-900/55 px-4 py-4"
                   >
-                    <div className="grid items-center gap-3" style={rowGridStyle}>
+                    <div
+                      style={{
+                        ...rowGridStyle,
+                        display: 'grid',
+                        alignItems: 'center',
+                        columnGap: '0.75rem',
+                      }}
+                    >
                       <div>
                         <p className="font-medium text-slate-100">{app.company}</p>
                       </div>
@@ -404,13 +410,6 @@ export default async function WorkspaceApplicationsPage({
                       </div>
 
                       <div className="space-y-2">
-                        <span
-                          className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${statusTone(
-                            app.status,
-                          )}`}
-                        >
-                          {statusLabel(app.status)}
-                        </span>
                         <form
                           action={async (formData) => {
                             'use server';
@@ -418,6 +417,14 @@ export default async function WorkspaceApplicationsPage({
                           }}
                           className="max-w-[220px]"
                         >
+                          <input
+                            type="hidden"
+                            name="redirectTo"
+                            value={buildApplicationsHref(workspaceId, {
+                              status: parsedStatusFilter ?? undefined,
+                              q: searchQuery || undefined,
+                            })}
+                          />
                           <StatusSelect currentStatus={app.status} />
                         </form>
                       </div>

@@ -64,7 +64,7 @@ export default async function WorkspacePage({
         <section className="grid gap-4 sm:grid-cols-3">
           <article className="card p-5">
             <p className="text-muted text-xs uppercase">Invite code</p>
-            <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm">
+            <p className="mt-3 text-3xl font-semibold tracking-wide">
               {workspace.inviteCode}
             </p>
           </article>

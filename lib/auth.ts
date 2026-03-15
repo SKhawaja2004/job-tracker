@@ -2,16 +2,11 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 
 export async function requireDbUser() {
-  const { userId } = await auth();
-
-  if (!userId) {
-    return null;
-  }
+  const { userId: clerkId } = await auth();
+  if (!clerkId) return null;
 
   const clerkUser = await currentUser();
-  if (!clerkUser) {
-    return null;
-  }
+  if (!clerkUser) return null;
 
   const primaryEmail =
     clerkUser.emailAddresses.find(
@@ -27,10 +22,31 @@ export async function requireDbUser() {
     clerkUser.username ||
     null;
 
-  return prisma.user.upsert({
+  const existingByClerkId = await prisma.user.findUnique({
+    where: { clerkId },
+  });
+
+  if (existingByClerkId) {
+    return prisma.user.update({
+      where: { id: existingByClerkId.id },
+      data: { email: primaryEmail, name: displayName },
+    });
+  }
+
+  const existingByEmail = await prisma.user.findUnique({
     where: { email: primaryEmail },
-    update: { name: displayName },
-    create: {
+  });
+
+  if (existingByEmail) {
+    return prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: { clerkId, name: displayName },
+    });
+  }
+
+  return prisma.user.create({
+    data: {
+      clerkId,
       email: primaryEmail,
       name: displayName,
     },
