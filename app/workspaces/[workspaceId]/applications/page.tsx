@@ -66,7 +66,9 @@ async function updateStatus(
 
   const rawStatus = formData.get('status');
   const status =
-    typeof rawStatus === 'string' ? parseApplicationStatus(rawStatus) : 'APPLIED';
+    typeof rawStatus === 'string'
+      ? parseApplicationStatus(rawStatus)
+      : null;
 
   if (!status) {
     redirect(`/workspaces/${workspaceId}/applications?msg=Invalid%20status`);
@@ -78,7 +80,9 @@ async function updateStatus(
   });
 
   if (!existingApp) {
-    redirect(`/workspaces/${workspaceId}/applications?msg=Application%20not%20found`);
+    redirect(
+      `/workspaces/${workspaceId}/applications?msg=Application%20not%20found`,
+    );
   }
 
   await prisma.application.update({
@@ -174,7 +178,9 @@ export default async function WorkspaceApplicationsPage({
   const qRaw = Array.isArray(sp.q) ? sp.q[0] : sp.q;
   const searchQuery = typeof qRaw === 'string' ? qRaw.trim() : '';
   const showCreate = (Array.isArray(sp.new) ? sp.new[0] : sp.new) === '1';
-  const parsedStatusFilter = statusFilter ? parseApplicationStatus(statusFilter) : null;
+  const parsedStatusFilter = statusFilter
+    ? parseApplicationStatus(statusFilter)
+    : null;
 
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
@@ -215,8 +221,12 @@ export default async function WorkspaceApplicationsPage({
     statusTotalsRaw.map((entry) => [entry.status, entry._count._all]),
   ) as Partial<Record<ApplicationStatus, number>>;
 
-  const totalCount = statusTotalsRaw.reduce((acc, entry) => acc + entry._count._all, 0);
-  const interviewCount = (totalsByStatus.INTERVIEW ?? 0) + (totalsByStatus.SCREEN ?? 0);
+  const totalCount = statusTotalsRaw.reduce(
+    (acc, entry) => acc + entry._count._all,
+    0,
+  );
+  const interviewCount =
+    (totalsByStatus.INTERVIEW ?? 0) + (totalsByStatus.SCREEN ?? 0);
   const offerCount = totalsByStatus.OFFER ?? 0;
   const rejectedCount = totalsByStatus.REJECTED ?? 0;
   const rowGridStyle = {
@@ -244,7 +254,10 @@ export default async function WorkspaceApplicationsPage({
             </div>
 
             <div className="flex items-center gap-2">
-              <Link href={`/workspaces/${workspaceId}`} className="btn-secondary px-4 py-2 text-sm">
+              <Link
+                href={`/workspaces/${workspaceId}`}
+                className="btn-secondary px-4 py-2 text-sm"
+              >
                 Back
               </Link>
               <Link
@@ -261,7 +274,11 @@ export default async function WorkspaceApplicationsPage({
           </div>
         </section>
 
-        {msg && <p className="card px-4 py-3 text-sm text-slate-200">{decodeURIComponent(msg)}</p>}
+        {msg && (
+          <p className="card px-4 py-3 text-sm text-slate-200">
+            {decodeURIComponent(msg)}
+          </p>
+        )}
 
         {showCreate && (
           <section className="card p-4">
@@ -272,11 +289,28 @@ export default async function WorkspaceApplicationsPage({
               }}
               className="grid gap-3 lg:grid-cols-4"
             >
-              <input className="input" name="company" placeholder="Company" required />
-              <input className="input" name="roleTitle" placeholder="Role title" required />
-              <input className="input" name="jobUrl" placeholder="Job URL (optional)" />
+              <input
+                className="input"
+                name="company"
+                placeholder="Company"
+                required
+              />
+              <input
+                className="input"
+                name="roleTitle"
+                placeholder="Role title"
+                required
+              />
+              <input
+                className="input"
+                name="jobUrl"
+                placeholder="Job URL (optional)"
+              />
               <div className="flex gap-2">
-                <button type="submit" className="btn-primary w-full px-3 py-2.5 text-sm">
+                <button
+                  type="submit"
+                  className="btn-primary w-full px-3 py-2.5 text-sm"
+                >
                   Save
                 </button>
                 <Link
@@ -296,19 +330,27 @@ export default async function WorkspaceApplicationsPage({
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="card p-4">
             <p className="text-muted text-xs uppercase">Total</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-100">{totalCount}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-100">
+              {totalCount}
+            </p>
           </div>
           <div className="card p-4">
             <p className="text-muted text-xs uppercase">Interviewing</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-100">{interviewCount}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-100">
+              {interviewCount}
+            </p>
           </div>
           <div className="card p-4">
             <p className="text-muted text-xs uppercase">Offers</p>
-            <p className="mt-2 text-2xl font-semibold text-emerald-300">{offerCount}</p>
+            <p className="mt-2 text-2xl font-semibold text-emerald-300">
+              {offerCount}
+            </p>
           </div>
           <div className="card p-4">
             <p className="text-muted text-xs uppercase">Rejected</p>
-            <p className="mt-2 text-2xl font-semibold text-rose-300">{rejectedCount}</p>
+            <p className="mt-2 text-2xl font-semibold text-rose-300">
+              {rejectedCount}
+            </p>
           </div>
         </section>
 
@@ -319,7 +361,11 @@ export default async function WorkspaceApplicationsPage({
                 href={buildApplicationsHref(workspaceId, {
                   q: searchQuery || undefined,
                 })}
-                className={!parsedStatusFilter ? 'btn-primary px-3 py-1.5 text-xs' : 'btn-secondary px-3 py-1.5 text-xs'}
+                className={
+                  !parsedStatusFilter
+                    ? 'btn-primary px-3 py-1.5 text-xs'
+                    : 'btn-secondary px-3 py-1.5 text-xs'
+                }
               >
                 All
               </Link>
@@ -363,7 +409,10 @@ export default async function WorkspaceApplicationsPage({
                     </option>
                   ))}
                 </select>
-                <button type="submit" className="btn-secondary px-3 py-2 text-sm">
+                <button
+                  type="submit"
+                  className="btn-secondary px-3 py-2 text-sm"
+                >
                   Apply
                 </button>
               </form>
@@ -373,13 +422,17 @@ export default async function WorkspaceApplicationsPage({
 
         <section className="card p-4">
           {applications.length === 0 ? (
-            <div className="p-6 text-sm text-muted">No applications found.</div>
+            <div className="text-muted p-6 text-sm">No applications found.</div>
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-[980px] space-y-2">
                 <div
                   className="px-4 py-2 text-xs font-semibold tracking-wide text-slate-400 uppercase"
-                  style={{ ...rowGridStyle, display: 'grid', columnGap: '1rem' }}
+                  style={{
+                    ...rowGridStyle,
+                    display: 'grid',
+                    columnGap: '1rem',
+                  }}
                 >
                   <div>Company</div>
                   <div>Role</div>
@@ -402,7 +455,9 @@ export default async function WorkspaceApplicationsPage({
                       }}
                     >
                       <div>
-                        <p className="font-medium text-slate-100">{app.company}</p>
+                        <p className="font-medium text-slate-100">
+                          {app.company}
+                        </p>
                       </div>
 
                       <div>
@@ -432,7 +487,9 @@ export default async function WorkspaceApplicationsPage({
                       <div>
                         <p className="text-slate-300">
                           {app.appliedAt
-                            ? new Date(app.appliedAt).toLocaleDateString('en-GB')
+                            ? new Date(app.appliedAt).toLocaleDateString(
+                                'en-GB',
+                              )
                             : '-'}
                         </p>
                       </div>

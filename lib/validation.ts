@@ -13,7 +13,10 @@ export function isValidInviteCode(code: string): boolean {
   return code.length >= 8 && code.length <= 128;
 }
 
-export function parseOptionalUrl(formData: FormData, key: string): string | null {
+export function parseOptionalUrl(
+  formData: FormData,
+  key: string,
+): string | null {
   const raw = formData.get(key);
   const value = typeof raw === 'string' ? raw.trim() : '';
 
@@ -21,12 +24,15 @@ export function parseOptionalUrl(formData: FormData, key: string): string | null
     return null;
   }
 
+  const hasProtocol = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(value);
+  const normalized = hasProtocol ? value : `https://${value}`;
+
   try {
-    const url = new URL(value);
+    const url = new URL(normalized);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       return null;
     }
-    return value;
+    return url.toString();
   } catch {
     return null;
   }

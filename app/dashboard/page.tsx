@@ -104,22 +104,6 @@ export default async function DashboardPage({
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
 
-  const orphanWorkspaces = await prisma.workspace.findMany({
-    where: { memberships: { none: {} } },
-    select: { id: true },
-  });
-
-  if (orphanWorkspaces.length > 0) {
-    await prisma.membership.createMany({
-      data: orphanWorkspaces.map((workspace) => ({
-        userId: dbUser.id,
-        workspaceId: workspace.id,
-        role: 'OWNER',
-      })),
-      skipDuplicates: true,
-    });
-  }
-
   const memberships = await prisma.membership.findMany({
     where: { userId: dbUser.id },
     orderBy: { workspace: { createdAt: 'desc' } },
@@ -146,9 +130,7 @@ export default async function DashboardPage({
           </p>
         </section>
 
-        {msg && (
-          <p className="card p-3 text-sm">{decodeURIComponent(msg)}</p>
-        )}
+        {msg && <p className="card p-3 text-sm">{decodeURIComponent(msg)}</p>}
 
         <section className="grid gap-4 lg:grid-cols-2">
           <form action={createWorkspace} className="card space-y-3 p-5">
@@ -160,7 +142,10 @@ export default async function DashboardPage({
               className="input"
               required
             />
-            <button type="submit" className="btn-primary w-full px-4 py-2.5 text-sm">
+            <button
+              type="submit"
+              className="btn-primary w-full px-4 py-2.5 text-sm"
+            >
               Create
             </button>
           </form>
@@ -174,7 +159,10 @@ export default async function DashboardPage({
               className="input"
               required
             />
-            <button type="submit" className="btn-secondary w-full px-4 py-2.5 text-sm">
+            <button
+              type="submit"
+              className="btn-secondary w-full px-4 py-2.5 text-sm"
+            >
               Join
             </button>
           </form>
@@ -187,7 +175,7 @@ export default async function DashboardPage({
           </div>
 
           {memberships.length === 0 ? (
-            <div className="card p-6 text-sm text-muted">
+            <div className="card text-muted p-6 text-sm">
               No workspaces yet.
             </div>
           ) : (

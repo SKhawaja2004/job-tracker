@@ -6,7 +6,8 @@ import { notFound, redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
   title: 'Workspace',
-  description: 'Workspace overview, invite code, and navigation to applications.',
+  description:
+    'Workspace overview, invite code, and navigation to applications.',
 };
 
 export default async function WorkspacePage({
@@ -42,13 +43,19 @@ export default async function WorkspacePage({
         <section className="card p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">{workspace.name}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {workspace.name}
+              </h1>
               <p className="text-muted mt-2 text-sm">
-                Created {new Date(workspace.createdAt).toLocaleDateString('en-GB')}
+                Created{' '}
+                {new Date(workspace.createdAt).toLocaleDateString('en-GB')}
               </p>
             </div>
             <div className="flex gap-2">
-              <Link href="/dashboard" className="btn-secondary px-3 py-2 text-sm">
+              <Link
+                href="/dashboard"
+                className="btn-secondary px-3 py-2 text-sm"
+              >
                 Back
               </Link>
               <Link
@@ -71,12 +78,16 @@ export default async function WorkspacePage({
 
           <article className="card p-5">
             <p className="text-muted text-xs uppercase">Members</p>
-            <p className="mt-3 text-3xl font-semibold">{workspace._count.memberships}</p>
+            <p className="mt-3 text-3xl font-semibold">
+              {workspace._count.memberships}
+            </p>
           </article>
 
           <article className="card p-5">
             <p className="text-muted text-xs uppercase">Applications</p>
-            <p className="mt-3 text-3xl font-semibold">{workspace._count.applications}</p>
+            <p className="mt-3 text-3xl font-semibold">
+              {workspace._count.applications}
+            </p>
           </article>
         </section>
       </div>

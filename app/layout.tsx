@@ -41,7 +41,9 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <ClerkProvider>
           <header className="topbar">
             <div className="container flex items-center justify-between gap-4 py-3">
@@ -56,7 +58,10 @@ export default async function RootLayout({
                   >
                     Dashboard
                   </Link>
-                  <Link href="/docs" className="btn-secondary px-3 py-1.5 text-sm">
+                  <Link
+                    href="/docs"
+                    className="btn-secondary px-3 py-1.5 text-sm"
+                  >
                     Docs
                   </Link>
                 </nav>
@@ -68,12 +73,18 @@ export default async function RootLayout({
                 ) : (
                   <>
                     <SignInButton mode="modal">
-                      <button type="button" className="btn-secondary px-3 py-1.5 text-sm">
+                      <button
+                        type="button"
+                        className="btn-secondary px-3 py-1.5 text-sm"
+                      >
                         Sign in
                       </button>
                     </SignInButton>
                     <SignUpButton mode="modal">
-                      <button type="button" className="btn-primary px-3 py-1.5 text-sm">
+                      <button
+                        type="button"
+                        className="btn-primary px-3 py-1.5 text-sm"
+                      >
                         Sign up
                       </button>
                     </SignUpButton>

@@ -36,19 +36,22 @@ export default function HomePage() {
           <article className="card p-5">
             <h2 className="text-sm font-semibold">Workspace collaboration</h2>
             <p className="text-muted mt-2 text-sm leading-6">
-              Invite others with a code and keep everyone aligned on the same pipeline.
+              Invite others with a code and keep everyone aligned on the same
+              pipeline.
             </p>
           </article>
           <article className="card p-5">
             <h2 className="text-sm font-semibold">List and board views</h2>
             <p className="text-muted mt-2 text-sm leading-6">
-              Switch between detail-oriented list mode and stage-based board mode.
+              Switch between detail-oriented list mode and stage-based board
+              mode.
             </p>
           </article>
           <article className="card p-5">
             <h2 className="text-sm font-semibold">Fast search and filters</h2>
             <p className="text-muted mt-2 text-sm leading-6">
-              Filter by status and search company or role across your applications.
+              Filter by status and search company or role across your
+              applications.
             </p>
           </article>
         </section>
