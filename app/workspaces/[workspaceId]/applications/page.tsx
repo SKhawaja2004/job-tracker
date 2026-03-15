@@ -10,6 +10,7 @@ import {
   parseApplicationStatus,
   parseOptionalUrl,
   parseRequiredText,
+  safeDecodeMessage,
 } from '@/lib/validation';
 import { StatusSelect } from './StatusSelect';
 
@@ -66,9 +67,7 @@ async function updateStatus(
 
   const rawStatus = formData.get('status');
   const status =
-    typeof rawStatus === 'string'
-      ? parseApplicationStatus(rawStatus)
-      : null;
+    typeof rawStatus === 'string' ? parseApplicationStatus(rawStatus) : null;
 
   if (!status) {
     redirect(`/workspaces/${workspaceId}/applications?msg=Invalid%20status`);
@@ -117,6 +116,7 @@ async function createApplication(
 
   const company = parseRequiredText(formData, 'company');
   const roleTitle = parseRequiredText(formData, 'roleTitle');
+  const rawJobUrl = parseRequiredText(formData, 'jobUrl');
   const jobUrl = parseOptionalUrl(formData, 'jobUrl');
 
   if (!company || !roleTitle) {
@@ -124,6 +124,15 @@ async function createApplication(
       buildApplicationsHref(workspaceId, {
         create: true,
         msg: 'Company and role are required',
+      }),
+    );
+  }
+
+  if (rawJobUrl && !jobUrl) {
+    redirect(
+      buildApplicationsHref(workspaceId, {
+        create: true,
+        msg: 'Invalid job URL',
       }),
     );
   }
@@ -239,6 +248,12 @@ export default async function WorkspaceApplicationsPage({
     minWidth: '620px',
   } as CSSProperties;
 
+  const decodedMsg = safeDecodeMessage(msg);
+  const showInvalidUrlError = decodedMsg?.includes('Invalid job URL');
+  const showRequiredError = decodedMsg?.includes(
+    'Company and role are required',
+  );
+
   return (
     <main className="page">
       <div className="container max-w-6xl space-y-4">
@@ -274,14 +289,26 @@ export default async function WorkspaceApplicationsPage({
           </div>
         </section>
 
-        {msg && (
-          <p className="card px-4 py-3 text-sm text-slate-200">
-            {decodeURIComponent(msg)}
-          </p>
-        )}
+
+          {decodedMsg && (
+            <p className="card px-4 py-3 text-sm text-slate-200">
+              {decodedMsg}
+            </p>
+          )}
 
         {showCreate && (
           <section className="card p-4">
+
+            {showInvalidUrlError && (
+          <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+            Invalid job URL. Use a full URL or domain (e.g. example.com/job).
+          </p>
+        )}
+        {showRequiredError && (
+          <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+            Company and role are required.
+          </p>
+        )}
             <form
               action={async (formData) => {
                 'use server';
@@ -289,6 +316,9 @@ export default async function WorkspaceApplicationsPage({
               }}
               className="grid gap-3 lg:grid-cols-4"
             >
+
+                
+
               <input
                 className="input"
                 name="company"
@@ -326,6 +356,8 @@ export default async function WorkspaceApplicationsPage({
             </form>
           </section>
         )}
+
+        
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="card p-4">

@@ -29,9 +29,9 @@ export function parseOptionalUrl(
 
   try {
     const url = new URL(normalized);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return null;
-    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!url.hostname || !url.hostname.includes('.')) return null;
+    
     return url.toString();
   } catch {
     return null;
@@ -52,4 +52,13 @@ export function parseApplicationStatus(raw: string): ApplicationStatus | null {
   return allowed.includes(raw as ApplicationStatus)
     ? (raw as ApplicationStatus)
     : null;
+}
+
+export function safeDecodeMessage(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

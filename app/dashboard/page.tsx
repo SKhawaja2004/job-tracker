@@ -9,6 +9,7 @@ import {
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { WorkspaceRow } from './WorkspaceRow';
+import { safeDecodeMessage } from '@/lib/validation';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -120,6 +121,8 @@ export default async function DashboardPage({
     },
   });
 
+  const decodedMsg = safeDecodeMessage(msg);
+
   return (
     <main className="page">
       <div className="container space-y-6">
@@ -130,7 +133,7 @@ export default async function DashboardPage({
           </p>
         </section>
 
-        {msg && <p className="card p-3 text-sm">{decodeURIComponent(msg)}</p>}
+        {decodedMsg && <p className="card p-3 text-sm">{decodedMsg}</p>}
 
         <section className="grid gap-4 lg:grid-cols-2">
           <form action={createWorkspace} className="card space-y-3 p-5">
