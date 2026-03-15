@@ -31,7 +31,7 @@ export function parseOptionalUrl(
     const url = new URL(normalized);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
     if (!url.hostname || !url.hostname.includes('.')) return null;
-    
+
     return url.toString();
   } catch {
     return null;

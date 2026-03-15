@@ -13,6 +13,7 @@ import {
   safeDecodeMessage,
 } from '@/lib/validation';
 import { StatusSelect } from './StatusSelect';
+import { RowActionsMenu } from './RowActionsMenu';
 
 export const metadata: Metadata = {
   title: 'Applications',
@@ -153,6 +154,47 @@ async function createApplication(
   redirect(`/workspaces/${workspaceId}/applications?msg=Application%20created`);
 }
 
+async function deleteApplication(
+  workspaceId: string,
+  applicationId: string,
+  formData: FormData,
+): Promise<void> {
+  'use server';
+
+  const dbUser = await requireDbUser();
+  if (!dbUser) redirect('/sign-in');
+
+  const isMember = await isWorkspaceMember(dbUser.id, workspaceId);
+  if (!isMember) {
+    redirect('/dashboard?msg=Not%20authorized%20for%20this%20workspace');
+  }
+
+  const existingApp = await prisma.application.findFirst({
+    where: { id: applicationId, workspaceId },
+    select: { id: true },
+  });
+
+  if (!existingApp) {
+    redirect(
+      `/workspaces/${workspaceId}/applications?msg=Application%20not%20found`,
+    );
+  }
+
+  await prisma.application.delete({
+    where: { id: applicationId },
+  });
+
+  const redirectToRaw = formData.get('redirectTo');
+  const redirectTo =
+    typeof redirectToRaw === 'string' &&
+    redirectToRaw.startsWith(`/workspaces/${workspaceId}/applications`)
+      ? redirectToRaw
+      : `/workspaces/${workspaceId}/applications`;
+
+  revalidatePath(`/workspaces/${workspaceId}/applications`);
+  redirect(redirectTo);
+}
+
 function statusLabel(status: ApplicationStatus): string {
   switch (status) {
     case 'APPLIED':
@@ -239,7 +281,7 @@ export default async function WorkspaceApplicationsPage({
   const offerCount = totalsByStatus.OFFER ?? 0;
   const rejectedCount = totalsByStatus.REJECTED ?? 0;
   const rowGridStyle = {
-    gridTemplateColumns: '1.35fr 1.2fr 1fr 0.8fr 0.65fr',
+    gridTemplateColumns: '1.35fr 1.2fr 1fr 0.8fr 0.65fr 0.7fr',
   } as CSSProperties;
   const toolbarGridStyle = {
     display: 'grid',
@@ -289,26 +331,23 @@ export default async function WorkspaceApplicationsPage({
           </div>
         </section>
 
-
-          {decodedMsg && (
-            <p className="card px-4 py-3 text-sm text-slate-200">
-              {decodedMsg}
-            </p>
-          )}
+        {decodedMsg && (
+          <p className="card px-4 py-3 text-sm text-slate-200">{decodedMsg}</p>
+        )}
 
         {showCreate && (
           <section className="card p-4">
-
             {showInvalidUrlError && (
-          <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-            Invalid job URL. Use a full URL or domain (e.g. example.com/job).
-          </p>
-        )}
-        {showRequiredError && (
-          <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-            Company and role are required.
-          </p>
-        )}
+              <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                Invalid job URL. Use a full URL or domain (e.g.
+                example.com/job).
+              </p>
+            )}
+            {showRequiredError && (
+              <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                Company and role are required.
+              </p>
+            )}
             <form
               action={async (formData) => {
                 'use server';
@@ -316,9 +355,6 @@ export default async function WorkspaceApplicationsPage({
               }}
               className="grid gap-3 lg:grid-cols-4"
             >
-
-                
-
               <input
                 className="input"
                 name="company"
@@ -356,8 +392,6 @@ export default async function WorkspaceApplicationsPage({
             </form>
           </section>
         )}
-
-        
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="card p-4">
@@ -471,6 +505,7 @@ export default async function WorkspaceApplicationsPage({
                   <div>Status</div>
                   <div>Applied</div>
                   <div>Link</div>
+                  <div>Actions</div>
                 </div>
 
                 {applications.map((app) => (
@@ -487,9 +522,12 @@ export default async function WorkspaceApplicationsPage({
                       }}
                     >
                       <div>
-                        <p className="font-medium text-slate-100">
+                        <Link
+                          href={`/workspaces/${workspaceId}/applications/${app.id}`}
+                          className="font-medium text-slate-100 underline-offset-2 hover:underline"
+                        >
                           {app.company}
-                        </p>
+                        </Link>
                       </div>
 
                       <div>
@@ -540,6 +578,31 @@ export default async function WorkspaceApplicationsPage({
                           <span className="text-slate-500">-</span>
                         )}
                       </div>
+
+                      <div>
+                        <form
+                          id={`delete-form-${app.id}`}
+                          action={async (formData) => {
+                            'use server';
+                            await deleteApplication(workspaceId, app.id, formData);
+                          }}
+                          className="hidden"
+                        >
+                          <input
+                            type="hidden"
+                            name="redirectTo"
+                            value={buildApplicationsHref(workspaceId, {
+                              status: parsedStatusFilter ?? undefined,
+                              q: searchQuery || undefined,
+                            })}
+                          />
+                        </form>
+                        <RowActionsMenu
+                          editHref={`/workspaces/${workspaceId}/applications/${app.id}/edit`}
+                          deleteFormId={`delete-form-${app.id}`}
+                        />
+                      </div>
+
                     </div>
                   </article>
                 ))}
