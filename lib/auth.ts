@@ -1,4 +1,5 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { Prisma, WorkspaceRole } from '@/lib/generated/prisma';
 import { prisma } from '@/lib/prisma';
 
 export async function requireDbUser() {
@@ -22,38 +23,61 @@ export async function requireDbUser() {
     clerkUser.username ||
     null;
 
-  const existingByClerkId = await prisma.user.findUnique({
-    where: { clerkId },
-  });
-
-  if (existingByClerkId) {
-    return prisma.user.update({
-      where: { id: existingByClerkId.id },
-      data: { email: primaryEmail, name: displayName },
+  try {
+    return await prisma.user.upsert({
+      where: { clerkId },
+      update: {
+        email: primaryEmail,
+        name: displayName,
+      },
+      create: {
+        clerkId,
+        email: primaryEmail,
+        name: displayName,
+      },
     });
-  }
+  } catch (error) {
+    // Handle unique constraint races during first-login sync.
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== 'P2002'
+    ) {
+      throw error;
+    }
 
-  const existingByEmail = await prisma.user.findUnique({
-    where: { email: primaryEmail },
-  });
-
-  if (existingByEmail) {
-    return prisma.user.update({
-      where: { id: existingByEmail.id },
-      data: { clerkId, name: displayName },
+    const existingByClerkId = await prisma.user.findUnique({
+      where: { clerkId },
     });
-  }
+    if (existingByClerkId) {
+      return prisma.user.update({
+        where: { id: existingByClerkId.id },
+        data: { email: primaryEmail, name: displayName },
+      });
+    }
 
-  return prisma.user.create({
-    data: {
-      clerkId,
-      email: primaryEmail,
-      name: displayName,
-    },
-  });
+    const existingByEmail = await prisma.user.findUnique({
+      where: { email: primaryEmail },
+    });
+    if (existingByEmail) {
+      return prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: { clerkId, name: displayName },
+      });
+    }
+
+    throw error;
+  }
 }
 
 export async function isWorkspaceMember(userId: string, workspaceId: string) {
+  const role = await getWorkspaceRole(userId, workspaceId);
+  return role !== null;
+}
+
+export async function getWorkspaceRole(
+  userId: string,
+  workspaceId: string,
+): Promise<WorkspaceRole | null> {
   const membership = await prisma.membership.findUnique({
     where: {
       userId_workspaceId: {
@@ -61,8 +85,17 @@ export async function isWorkspaceMember(userId: string, workspaceId: string) {
         workspaceId,
       },
     },
-    select: { id: true },
+    select: { role: true },
   });
 
-  return Boolean(membership);
+  return membership?.role ?? null;
+}
+
+export async function hasWorkspaceRole(
+  userId: string,
+  workspaceId: string,
+  allowedRoles: WorkspaceRole[],
+) {
+  const role = await getWorkspaceRole(userId, workspaceId);
+  return role !== null && allowedRoles.includes(role);
 }

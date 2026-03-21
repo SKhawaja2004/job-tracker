@@ -5,7 +5,11 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { ApplicationStatus } from '@/lib/generated/prisma';
 import { prisma } from '@/lib/prisma';
-import { requireDbUser, isWorkspaceMember } from '@/lib/auth';
+import {
+  requireDbUser,
+  isWorkspaceMember,
+  hasWorkspaceRole,
+} from '@/lib/auth';
 import {
   parseApplicationStatus,
   parseOptionalUrl,
@@ -14,6 +18,9 @@ import {
 } from '@/lib/validation';
 import { StatusSelect } from './StatusSelect';
 import { RowActionsMenu } from './RowActionsMenu';
+import { AddApplicationModal } from './AddApplicationModal';
+import { type CreateApplicationState } from './createApplicationState';
+import { type UpdateApplicationState } from './updateApplicationState';
 
 export const metadata: Metadata = {
   title: 'Applications',
@@ -35,14 +42,12 @@ function buildApplicationsHref(
   options: {
     status?: ApplicationStatus;
     q?: string;
-    create?: boolean;
     msg?: string;
   },
 ) {
   const params = new URLSearchParams();
   if (options.status) params.set('status', options.status);
   if (options.q) params.set('q', options.q);
-  if (options.create) params.set('new', '1');
   if (options.msg) params.set('msg', options.msg);
 
   const query = params.toString();
@@ -103,8 +108,9 @@ async function updateStatus(
 
 async function createApplication(
   workspaceId: string,
+  _prevState: CreateApplicationState,
   formData: FormData,
-): Promise<void> {
+): Promise<CreateApplicationState> {
   'use server';
 
   const dbUser = await requireDbUser();
@@ -112,7 +118,7 @@ async function createApplication(
 
   const isMember = await isWorkspaceMember(dbUser.id, workspaceId);
   if (!isMember) {
-    redirect('/dashboard?msg=Not%20authorized%20for%20this%20workspace');
+    return { status: 'error', message: 'Not authorized for this workspace.' };
   }
 
   const company = parseRequiredText(formData, 'company');
@@ -120,22 +126,13 @@ async function createApplication(
   const rawJobUrl = parseRequiredText(formData, 'jobUrl');
   const jobUrl = parseOptionalUrl(formData, 'jobUrl');
 
-  if (!company || !roleTitle) {
-    redirect(
-      buildApplicationsHref(workspaceId, {
-        create: true,
-        msg: 'Company and role are required',
-      }),
-    );
-  }
+  const fieldErrors: CreateApplicationState['fieldErrors'] = {};
+  if (!company) fieldErrors.company = 'Company is required.';
+  if (!roleTitle) fieldErrors.roleTitle = 'Role title is required.';
+  if (rawJobUrl && !jobUrl) fieldErrors.jobUrl = 'Invalid job URL.';
 
-  if (rawJobUrl && !jobUrl) {
-    redirect(
-      buildApplicationsHref(workspaceId, {
-        create: true,
-        msg: 'Invalid job URL',
-      }),
-    );
+  if (Object.keys(fieldErrors).length > 0) {
+    return { status: 'error', message: 'Please fix the highlighted fields.', fieldErrors };
   }
 
   await prisma.application.create({
@@ -151,8 +148,9 @@ async function createApplication(
   });
 
   revalidatePath(`/workspaces/${workspaceId}/applications`);
-  redirect(`/workspaces/${workspaceId}/applications?msg=Application%20created`);
+  return { status: 'success', message: 'Application created.' };
 }
+
 
 async function deleteApplication(
   workspaceId: string,
@@ -164,8 +162,11 @@ async function deleteApplication(
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
 
-  const isMember = await isWorkspaceMember(dbUser.id, workspaceId);
-  if (!isMember) {
+  const canManage = await hasWorkspaceRole(dbUser.id, workspaceId, [
+    'OWNER',
+    'ADMIN',
+  ]);
+  if (!canManage) {
     redirect('/dashboard?msg=Not%20authorized%20for%20this%20workspace');
   }
 
@@ -193,6 +194,77 @@ async function deleteApplication(
 
   revalidatePath(`/workspaces/${workspaceId}/applications`);
   redirect(redirectTo);
+}
+
+async function updateApplicationFromList(
+  workspaceId: string,
+  applicationId: string,
+  _prevState: UpdateApplicationState,
+  formData: FormData,
+): Promise<UpdateApplicationState> {
+  'use server';
+
+  const dbUser = await requireDbUser();
+  if (!dbUser) redirect('/sign-in');
+
+  const canManage = await hasWorkspaceRole(dbUser.id, workspaceId, [
+    'OWNER',
+    'ADMIN',
+  ]);
+  if (!canManage) {
+    return { status: 'error', message: 'Not authorized for this workspace.' };
+  }
+
+  const company = parseRequiredText(formData, 'company');
+  const roleTitle = parseRequiredText(formData, 'roleTitle');
+  const rawJobUrl = parseRequiredText(formData, 'jobUrl');
+  const jobUrl = parseOptionalUrl(formData, 'jobUrl');
+  const rawStatus = formData.get('status');
+  const parsedStatus =
+    typeof rawStatus === 'string' ? parseApplicationStatus(rawStatus) : null;
+
+  const fieldErrors: UpdateApplicationState['fieldErrors'] = {};
+  if (!company) fieldErrors.company = 'Company is required.';
+  if (!roleTitle) fieldErrors.roleTitle = 'Role title is required.';
+  if (rawJobUrl && !jobUrl) fieldErrors.jobUrl = 'Invalid job URL.';
+  if (!parsedStatus) fieldErrors.status = 'Invalid status.';
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return {
+      status: 'error',
+      message: 'Please fix the highlighted fields.',
+      fieldErrors,
+      values: {
+        company,
+        roleTitle,
+        jobUrl: rawJobUrl,
+        status: parsedStatus ?? undefined,
+      },
+    };
+  }
+
+  const status = parsedStatus as ApplicationStatus;
+
+  const existingApp = await prisma.application.findFirst({
+    where: { id: applicationId, workspaceId },
+    select: { id: true },
+  });
+  if (!existingApp) {
+    return { status: 'error', message: 'Application not found.' };
+  }
+
+  await prisma.application.update({
+    where: { id: applicationId },
+    data: {
+      company,
+      roleTitle,
+      jobUrl,
+      status,
+    },
+  });
+
+  revalidatePath(`/workspaces/${workspaceId}/applications`);
+  return { status: 'success', message: 'Application updated.' };
 }
 
 function statusLabel(status: ApplicationStatus): string {
@@ -228,7 +300,6 @@ export default async function WorkspaceApplicationsPage({
   const statusFilter = Array.isArray(sp.status) ? sp.status[0] : sp.status;
   const qRaw = Array.isArray(sp.q) ? sp.q[0] : sp.q;
   const searchQuery = typeof qRaw === 'string' ? qRaw.trim() : '';
-  const showCreate = (Array.isArray(sp.new) ? sp.new[0] : sp.new) === '1';
   const parsedStatusFilter = statusFilter
     ? parseApplicationStatus(statusFilter)
     : null;
@@ -245,6 +316,10 @@ export default async function WorkspaceApplicationsPage({
   });
 
   if (!workspace) notFound();
+  const canManageApplications = await hasWorkspaceRole(dbUser.id, workspaceId, [
+    'OWNER',
+    'ADMIN',
+  ]);
 
   const applications = await prisma.application.findMany({
     where: {
@@ -291,10 +366,7 @@ export default async function WorkspaceApplicationsPage({
   } as CSSProperties;
 
   const decodedMsg = safeDecodeMessage(msg);
-  const showInvalidUrlError = decodedMsg?.includes('Invalid job URL');
-  const showRequiredError = decodedMsg?.includes(
-    'Company and role are required',
-  );
+  const showGlobalMsg = decodedMsg;
 
   return (
     <main className="page">
@@ -317,80 +389,22 @@ export default async function WorkspaceApplicationsPage({
               >
                 Back
               </Link>
-              <Link
-                href={buildApplicationsHref(workspaceId, {
-                  status: parsedStatusFilter ?? undefined,
-                  q: searchQuery || undefined,
-                  create: true,
-                })}
-                className="btn-primary px-4 py-2 text-sm"
-              >
-                Add application
-              </Link>
+
+              <AddApplicationModal
+                action={createApplication.bind(
+                  null,
+                  workspaceId,
+                ) as (
+                  state: CreateApplicationState,
+                  formData: FormData,
+                ) => Promise<CreateApplicationState>}
+              />
             </div>
           </div>
         </section>
 
-        {decodedMsg && (
+        {showGlobalMsg && (
           <p className="card px-4 py-3 text-sm text-slate-200">{decodedMsg}</p>
-        )}
-
-        {showCreate && (
-          <section className="card p-4">
-            {showInvalidUrlError && (
-              <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-                Invalid job URL. Use a full URL or domain (e.g.
-                example.com/job).
-              </p>
-            )}
-            {showRequiredError && (
-              <p className="rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-                Company and role are required.
-              </p>
-            )}
-            <form
-              action={async (formData) => {
-                'use server';
-                await createApplication(workspaceId, formData);
-              }}
-              className="grid gap-3 lg:grid-cols-4"
-            >
-              <input
-                className="input"
-                name="company"
-                placeholder="Company"
-                required
-              />
-              <input
-                className="input"
-                name="roleTitle"
-                placeholder="Role title"
-                required
-              />
-              <input
-                className="input"
-                name="jobUrl"
-                placeholder="Job URL (optional)"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="btn-primary w-full px-3 py-2.5 text-sm"
-                >
-                  Save
-                </button>
-                <Link
-                  href={buildApplicationsHref(workspaceId, {
-                    status: parsedStatusFilter ?? undefined,
-                    q: searchQuery || undefined,
-                  })}
-                  className="btn-secondary w-full px-3 py-2.5 text-center text-sm"
-                >
-                  Cancel
-                </Link>
-              </div>
-            </form>
-          </section>
         )}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -580,29 +594,51 @@ export default async function WorkspaceApplicationsPage({
                       </div>
 
                       <div>
-                        <form
-                          id={`delete-form-${app.id}`}
-                          action={async (formData) => {
-                            'use server';
-                            await deleteApplication(workspaceId, app.id, formData);
-                          }}
-                          className="hidden"
-                        >
-                          <input
-                            type="hidden"
-                            name="redirectTo"
-                            value={buildApplicationsHref(workspaceId, {
-                              status: parsedStatusFilter ?? undefined,
-                              q: searchQuery || undefined,
-                            })}
-                          />
-                        </form>
-                        <RowActionsMenu
-                          editHref={`/workspaces/${workspaceId}/applications/${app.id}/edit`}
-                          deleteFormId={`delete-form-${app.id}`}
-                        />
+                        {canManageApplications ? (
+                          <>
+                            <form
+                              id={`delete-form-${app.id}`}
+                              action={async (formData) => {
+                                'use server';
+                                await deleteApplication(
+                                  workspaceId,
+                                  app.id,
+                                  formData,
+                                );
+                              }}
+                              className="hidden"
+                            >
+                              <input
+                                type="hidden"
+                                name="redirectTo"
+                                value={buildApplicationsHref(workspaceId, {
+                                  status: parsedStatusFilter ?? undefined,
+                                  q: searchQuery || undefined,
+                                })}
+                              />
+                            </form>
+                            <RowActionsMenu
+                              deleteFormId={`delete-form-${app.id}`}
+                              initialValues={{
+                                company: app.company,
+                                roleTitle: app.roleTitle,
+                                jobUrl: app.jobUrl ?? '',
+                                status: app.status,
+                              }}
+                              editAction={updateApplicationFromList.bind(
+                                null,
+                                workspaceId,
+                                app.id,
+                              ) as (
+                                state: UpdateApplicationState,
+                                formData: FormData,
+                              ) => Promise<UpdateApplicationState>}
+                            />
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-500">View only</span>
+                        )}
                       </div>
-
                     </div>
                   </article>
                 ))}

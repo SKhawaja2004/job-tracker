@@ -121,7 +121,7 @@ export default async function ApplicationDetailPage({
           </article>
         </section>
 
-        <section className="card p-6 space-y-4">
+        <section className="card space-y-4 p-6">
           <div>
             <p className="text-muted text-xs uppercase">Job URL</p>
             {application.jobUrl ? (
@@ -140,7 +140,9 @@ export default async function ApplicationDetailPage({
 
           <div>
             <p className="text-muted text-xs uppercase">Location</p>
-            <p className="mt-2 text-slate-100">{application.location || 'Not set'}</p>
+            <p className="mt-2 text-slate-100">
+              {application.location || 'Not set'}
+            </p>
           </div>
 
           <div>

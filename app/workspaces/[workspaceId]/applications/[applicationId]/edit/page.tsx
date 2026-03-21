@@ -4,7 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { ApplicationStatus } from '@/lib/generated/prisma';
 import { prisma } from '@/lib/prisma';
-import { isWorkspaceMember, requireDbUser } from '@/lib/auth';
+import { hasWorkspaceRole, requireDbUser } from '@/lib/auth';
 import {
   parseApplicationStatus,
   parseOptionalUrl,
@@ -56,8 +56,11 @@ async function updateApplicationDetails(
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
 
-  const isMember = await isWorkspaceMember(dbUser.id, workspaceId);
-  if (!isMember) {
+  const canManage = await hasWorkspaceRole(dbUser.id, workspaceId, [
+    'OWNER',
+    'ADMIN',
+  ]);
+  if (!canManage) {
     redirect('/dashboard?msg=Not%20authorized%20for%20this%20workspace');
   }
 
@@ -214,21 +217,28 @@ export default async function EditApplicationPage({
         )}
 
         <section className="card p-6">
-          <h2 className="text-lg font-semibold text-slate-100">Edit application</h2>
+          <h2 className="text-lg font-semibold text-slate-100">
+            Edit application
+          </h2>
           <p className="text-muted mt-1 text-sm">
-            Last updated {new Date(application.updatedAt).toLocaleString('en-GB')}
+            Last updated{' '}
+            {new Date(application.updatedAt).toLocaleString('en-GB')}
           </p>
 
           <form
             action={async (formData) => {
               'use server';
-              await updateApplicationDetails(workspaceId, application.id, formData);
+              await updateApplicationDetails(
+                workspaceId,
+                application.id,
+                formData,
+              );
             }}
             className="mt-5 space-y-4"
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase text-slate-400">
+                <label className="mb-1 block text-xs font-semibold text-slate-400 uppercase">
                   Company
                 </label>
                 <input
@@ -239,7 +249,7 @@ export default async function EditApplicationPage({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase text-slate-400">
+                <label className="mb-1 block text-xs font-semibold text-slate-400 uppercase">
                   Role
                 </label>
                 <input
@@ -253,7 +263,7 @@ export default async function EditApplicationPage({
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase text-slate-400">
+                <label className="mb-1 block text-xs font-semibold text-slate-400 uppercase">
                   Status
                 </label>
                 <select
@@ -270,7 +280,7 @@ export default async function EditApplicationPage({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase text-slate-400">
+                <label className="mb-1 block text-xs font-semibold text-slate-400 uppercase">
                   Applied Date
                 </label>
                 <input
@@ -281,7 +291,7 @@ export default async function EditApplicationPage({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase text-slate-400">
+                <label className="mb-1 block text-xs font-semibold text-slate-400 uppercase">
                   Location
                 </label>
                 <input
@@ -294,7 +304,7 @@ export default async function EditApplicationPage({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase text-slate-400">
+              <label className="mb-1 block text-xs font-semibold text-slate-400 uppercase">
                 Job URL
               </label>
               <input
@@ -306,7 +316,7 @@ export default async function EditApplicationPage({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase text-slate-400">
+              <label className="mb-1 block text-xs font-semibold text-slate-400 uppercase">
                 Notes
               </label>
               <textarea
