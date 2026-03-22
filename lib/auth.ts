@@ -2,6 +2,13 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { Prisma, WorkspaceRole } from '@/lib/generated/prisma';
 import { prisma } from '@/lib/prisma';
 
+export const APPLICATION_MANAGE_ROLES: WorkspaceRole[] = ['OWNER', 'ADMIN'];
+export const APPLICATION_STATUS_UPDATE_ROLES: WorkspaceRole[] = [
+  'OWNER',
+  'ADMIN',
+  'MEMBER',
+];
+
 export async function requireDbUser() {
   const { userId: clerkId } = await auth();
   if (!clerkId) return null;

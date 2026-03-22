@@ -6,19 +6,23 @@ import { revalidatePath } from 'next/cache';
 import { ApplicationStatus } from '@/lib/generated/prisma';
 import { prisma } from '@/lib/prisma';
 import {
+  APPLICATION_MANAGE_ROLES,
+  APPLICATION_STATUS_UPDATE_ROLES,
+  hasWorkspaceRole,
   requireDbUser,
   isWorkspaceMember,
-  hasWorkspaceRole,
 } from '@/lib/auth';
 import {
   parseApplicationStatus,
   parseOptionalUrl,
   parseRequiredText,
-  safeDecodeMessage,
+  validateCompany,
+  validateRoleTitle,
 } from '@/lib/validation';
 import { StatusSelect } from './StatusSelect';
 import { RowActionsMenu } from './RowActionsMenu';
 import { AddApplicationModal } from './AddApplicationModal';
+import { ApplicationsToolbar } from './ApplicationsToolbar';
 import { type CreateApplicationState } from './createApplicationState';
 import { type UpdateApplicationState } from './updateApplicationState';
 
@@ -26,16 +30,6 @@ export const metadata: Metadata = {
   title: 'Applications',
   description: 'Track and manage job applications in a clean list view.',
 };
-
-const STATUSES: ApplicationStatus[] = [
-  'APPLIED',
-  'OA',
-  'SCREEN',
-  'INTERVIEW',
-  'OFFER',
-  'REJECTED',
-  'WITHDRAWN',
-];
 
 function buildApplicationsHref(
   workspaceId: string,
@@ -66,8 +60,12 @@ async function updateStatus(
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
 
-  const isMember = await isWorkspaceMember(dbUser.id, workspaceId);
-  if (!isMember) {
+  const canUpdateStatus = await hasWorkspaceRole(
+    dbUser.id,
+    workspaceId,
+    APPLICATION_STATUS_UPDATE_ROLES,
+  );
+  if (!canUpdateStatus) {
     redirect('/dashboard?msg=Not%20authorized%20for%20this%20workspace');
   }
 
@@ -127,8 +125,10 @@ async function createApplication(
   const jobUrl = parseOptionalUrl(formData, 'jobUrl');
 
   const fieldErrors: CreateApplicationState['fieldErrors'] = {};
-  if (!company) fieldErrors.company = 'Company is required.';
-  if (!roleTitle) fieldErrors.roleTitle = 'Role title is required.';
+  const companyError = validateCompany(company);
+  if (companyError) fieldErrors.company = companyError;
+  const roleTitleError = validateRoleTitle(roleTitle);
+  if (roleTitleError) fieldErrors.roleTitle = roleTitleError;
   if (rawJobUrl && !jobUrl) fieldErrors.jobUrl = 'Invalid job URL.';
 
   if (Object.keys(fieldErrors).length > 0) {
@@ -162,10 +162,11 @@ async function deleteApplication(
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
 
-  const canManage = await hasWorkspaceRole(dbUser.id, workspaceId, [
-    'OWNER',
-    'ADMIN',
-  ]);
+  const canManage = await hasWorkspaceRole(
+    dbUser.id,
+    workspaceId,
+    APPLICATION_MANAGE_ROLES,
+  );
   if (!canManage) {
     redirect('/dashboard?msg=Not%20authorized%20for%20this%20workspace');
   }
@@ -207,10 +208,11 @@ async function updateApplicationFromList(
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
 
-  const canManage = await hasWorkspaceRole(dbUser.id, workspaceId, [
-    'OWNER',
-    'ADMIN',
-  ]);
+  const canManage = await hasWorkspaceRole(
+    dbUser.id,
+    workspaceId,
+    APPLICATION_MANAGE_ROLES,
+  );
   if (!canManage) {
     return { status: 'error', message: 'Not authorized for this workspace.' };
   }
@@ -224,8 +226,10 @@ async function updateApplicationFromList(
     typeof rawStatus === 'string' ? parseApplicationStatus(rawStatus) : null;
 
   const fieldErrors: UpdateApplicationState['fieldErrors'] = {};
-  if (!company) fieldErrors.company = 'Company is required.';
-  if (!roleTitle) fieldErrors.roleTitle = 'Role title is required.';
+  const companyError = validateCompany(company);
+  if (companyError) fieldErrors.company = companyError;
+  const roleTitleError = validateRoleTitle(roleTitle);
+  if (roleTitleError) fieldErrors.roleTitle = roleTitleError;
   if (rawJobUrl && !jobUrl) fieldErrors.jobUrl = 'Invalid job URL.';
   if (!parsedStatus) fieldErrors.status = 'Invalid status.';
 
@@ -267,25 +271,6 @@ async function updateApplicationFromList(
   return { status: 'success', message: 'Application updated.' };
 }
 
-function statusLabel(status: ApplicationStatus): string {
-  switch (status) {
-    case 'APPLIED':
-      return 'Applied';
-    case 'OA':
-      return 'OA';
-    case 'SCREEN':
-      return 'Screen';
-    case 'INTERVIEW':
-      return 'Interview';
-    case 'OFFER':
-      return 'Offer';
-    case 'REJECTED':
-      return 'Rejected';
-    case 'WITHDRAWN':
-      return 'Withdrawn';
-  }
-}
-
 export default async function WorkspaceApplicationsPage({
   params,
   searchParams,
@@ -296,7 +281,6 @@ export default async function WorkspaceApplicationsPage({
   const { workspaceId } = await params;
   const sp = (await searchParams) ?? {};
 
-  const msg = Array.isArray(sp.msg) ? sp.msg[0] : sp.msg;
   const statusFilter = Array.isArray(sp.status) ? sp.status[0] : sp.status;
   const qRaw = Array.isArray(sp.q) ? sp.q[0] : sp.q;
   const searchQuery = typeof qRaw === 'string' ? qRaw.trim() : '';
@@ -316,10 +300,11 @@ export default async function WorkspaceApplicationsPage({
   });
 
   if (!workspace) notFound();
-  const canManageApplications = await hasWorkspaceRole(dbUser.id, workspaceId, [
-    'OWNER',
-    'ADMIN',
-  ]);
+  const canManageApplications = await hasWorkspaceRole(
+    dbUser.id,
+    workspaceId,
+    APPLICATION_MANAGE_ROLES,
+  );
 
   const applications = await prisma.application.findMany({
     where: {
@@ -356,56 +341,26 @@ export default async function WorkspaceApplicationsPage({
   const offerCount = totalsByStatus.OFFER ?? 0;
   const rejectedCount = totalsByStatus.REJECTED ?? 0;
   const rowGridStyle = {
-    gridTemplateColumns: '1.35fr 1.2fr 1fr 0.8fr 0.65fr 0.7fr',
+    gridTemplateColumns: '1.5fr 1.25fr 1fr 0.85fr 0.6fr',
   } as CSSProperties;
-  const toolbarGridStyle = {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(320px, 1fr) 180px 110px',
-    gap: '0.5rem',
-    minWidth: '620px',
-  } as CSSProperties;
-
-  const decodedMsg = safeDecodeMessage(msg);
-  const showGlobalMsg = decodedMsg;
 
   return (
     <main className="page">
       <div className="container max-w-6xl space-y-4">
-        <section className="card p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-100">
-                {workspace.name} applications
-              </h1>
-              <p className="text-muted mt-1 text-sm">
-                Clean table view for day-to-day tracking.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/workspaces/${workspaceId}`}
-                className="btn-secondary px-4 py-2 text-sm"
-              >
-                Back
-              </Link>
-
-              <AddApplicationModal
-                action={createApplication.bind(
-                  null,
-                  workspaceId,
-                ) as (
-                  state: CreateApplicationState,
-                  formData: FormData,
-                ) => Promise<CreateApplicationState>}
-              />
-            </div>
-          </div>
+        <section className="flex flex-wrap items-start justify-between gap-4">
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-100">
+            {workspace.name}
+          </h1>
+          <AddApplicationModal
+            action={createApplication.bind(
+              null,
+              workspaceId,
+            ) as (
+              state: CreateApplicationState,
+              formData: FormData,
+            ) => Promise<CreateApplicationState>}
+          />
         </section>
-
-        {showGlobalMsg && (
-          <p className="card px-4 py-3 text-sm text-slate-200">{decodedMsg}</p>
-        )}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="card p-4">
@@ -434,71 +389,19 @@ export default async function WorkspaceApplicationsPage({
           </div>
         </section>
 
-        <section className="card p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={buildApplicationsHref(workspaceId, {
-                  q: searchQuery || undefined,
-                })}
-                className={
-                  !parsedStatusFilter
-                    ? 'btn-primary px-3 py-1.5 text-xs'
-                    : 'btn-secondary px-3 py-1.5 text-xs'
-                }
-              >
-                All
-              </Link>
-              {STATUSES.map((status) => (
-                <Link
-                  key={status}
-                  href={buildApplicationsHref(workspaceId, {
-                    status,
-                    q: searchQuery || undefined,
-                  })}
-                  className={
-                    parsedStatusFilter === status
-                      ? 'btn-primary px-3 py-1.5 text-xs'
-                      : 'btn-secondary px-3 py-1.5 text-xs'
-                  }
-                >
-                  {statusLabel(status)}
-                </Link>
-              ))}
-            </div>
-
-            <div className="w-full overflow-x-auto">
-              <form style={toolbarGridStyle} method="get">
-                <input
-                  type="text"
-                  name="q"
-                  defaultValue={searchQuery}
-                  placeholder="Search company or role"
-                  className="input"
-                />
-                <select
-                  name="status"
-                  defaultValue={parsedStatusFilter ?? ''}
-                  className="input select-clean"
-                  style={{ WebkitAppearance: 'none', appearance: 'none' }}
-                >
-                  <option value="">All statuses</option>
-                  {STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {statusLabel(status)}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  className="btn-secondary px-3 py-2 text-sm"
-                >
-                  Apply
-                </button>
-              </form>
-            </div>
-          </div>
-        </section>
+        <ApplicationsToolbar
+          workspaceId={workspaceId}
+          initialQuery={searchQuery}
+          initialStatus={(parsedStatusFilter ?? '') as
+            | ''
+            | 'APPLIED'
+            | 'OA'
+            | 'SCREEN'
+            | 'INTERVIEW'
+            | 'OFFER'
+            | 'REJECTED'
+            | 'WITHDRAWN'}
+        />
 
         <section className="card p-4">
           {applications.length === 0 ? (
@@ -518,37 +421,47 @@ export default async function WorkspaceApplicationsPage({
                   <div>Role</div>
                   <div>Status</div>
                   <div>Applied</div>
-                  <div>Link</div>
-                  <div>Actions</div>
+                  <div></div>
                 </div>
 
                 {applications.map((app) => (
                   <article
                     key={app.id}
-                    className="rounded-lg border border-slate-700 bg-slate-900/55 px-4 py-4"
+                    className="relative rounded-lg border border-slate-700 bg-slate-900/55 px-4 py-4 transition hover:border-slate-600 hover:bg-slate-900/85"
                   >
+                    <Link
+                      href={`/workspaces/${workspaceId}/applications/${app.id}`}
+                      aria-label={`Open ${app.company} ${app.roleTitle}`}
+                      className="absolute inset-0 z-10 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
+                    />
                     <div
+                      className="relative z-20"
                       style={{
                         ...rowGridStyle,
                         display: 'grid',
                         alignItems: 'center',
-                        columnGap: '0.75rem',
+                        columnGap: '1rem',
                       }}
                     >
                       <div>
                         <Link
                           href={`/workspaces/${workspaceId}/applications/${app.id}`}
-                          className="font-medium text-slate-100 underline-offset-2 hover:underline"
+                          className="relative z-30 block rounded px-1 py-2 -my-2 font-medium text-slate-100 pointer-events-auto"
                         >
                           {app.company}
                         </Link>
                       </div>
 
                       <div>
-                        <p className="text-slate-300">{app.roleTitle}</p>
+                        <Link
+                          href={`/workspaces/${workspaceId}/applications/${app.id}`}
+                          className="relative z-30 block rounded px-1 py-2 -my-2 text-slate-300 pointer-events-auto"
+                        >
+                          {app.roleTitle}
+                        </Link>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="relative z-20 pointer-events-auto space-y-2">
                         <form
                           action={async (formData) => {
                             'use server';
@@ -568,33 +481,49 @@ export default async function WorkspaceApplicationsPage({
                         </form>
                       </div>
 
-                      <div>
-                        <p className="text-slate-300">
+                      <div className="pointer-events-none">
+                        <div className="block rounded px-1 py-2 -my-2 text-slate-300">
                           {app.appliedAt
-                            ? new Date(app.appliedAt).toLocaleDateString(
-                                'en-GB',
-                              )
+                            ? new Date(app.appliedAt).toLocaleDateString('en-GB')
                             : '-'}
-                        </p>
+                        </div>
                       </div>
 
-                      <div>
-                        {app.jobUrl ? (
+                      <div className="relative z-20 pointer-events-auto flex items-center justify-center gap-2">
+                        {app.jobUrl && (
                           <a
                             href={app.jobUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-slate-100 underline underline-offset-2"
+                            aria-label="Open job link"
+                            title="Open job link"
+                            className="text-slate-400 transition-colors hover:text-blue-400"
                           >
-                            Open
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-5 w-5"
+                            >
+                              <path
+                                d="M10.59 13.41a1 1 0 0 1 0-1.41l3.83-3.83a3 3 0 1 1 4.24 4.24l-3.83 3.83a3 3 0 0 1-4.24 0"
+                                stroke="currentColor"
+                                strokeWidth="1.75"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d="M13.41 10.59a1 1 0 0 1 0 1.41l-3.83 3.83a3 3 0 0 1-4.24-4.24l3.83-3.83a3 3 0 0 1 4.24 0"
+                                stroke="currentColor"
+                                strokeWidth="1.75"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
                           </a>
-                        ) : (
-                          <span className="text-slate-500">-</span>
                         )}
-                      </div>
 
-                      <div>
-                        {canManageApplications ? (
+                        {canManageApplications && (
                           <>
                             <form
                               id={`delete-form-${app.id}`}
@@ -635,8 +564,6 @@ export default async function WorkspaceApplicationsPage({
                               ) => Promise<UpdateApplicationState>}
                             />
                           </>
-                        ) : (
-                          <span className="text-xs text-slate-500">View only</span>
                         )}
                       </div>
                     </div>

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import type { ApplicationStatus } from '@/lib/generated/prisma';
+import { useToast } from '@/app/components/ToastProvider';
 import {
   INITIAL_UPDATE_STATE,
   type UpdateApplicationState,
@@ -39,14 +40,22 @@ function RowEditModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { pushToast } = useToast();
   const [state, formAction, pending] = useActionState(action, INITIAL_UPDATE_STATE);
 
   useEffect(() => {
     if (state.status === 'success') {
+      if (state.message) pushToast(state.message, 'success');
       onClose();
       router.refresh();
     }
-  }, [state.status, onClose, router]);
+  }, [state.message, state.status, pushToast, onClose, router]);
+
+  useEffect(() => {
+    if (state.status === 'error' && state.message) {
+      pushToast(state.message, 'error');
+    }
+  }, [state.message, state.status, pushToast]);
 
   const company = state.values?.company ?? initialValues.company;
   const roleTitle = state.values?.roleTitle ?? initialValues.roleTitle;
@@ -68,12 +77,6 @@ function RowEditModal({
         </div>
 
         <form action={formAction} className="grid gap-3 lg:grid-cols-2">
-          {state.status === 'error' && state.message && (
-            <p className="lg:col-span-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-              {state.message}
-            </p>
-          )}
-
           <div>
             <input
               className="input"

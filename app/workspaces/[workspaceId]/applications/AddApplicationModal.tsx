@@ -6,6 +6,7 @@ import {
   INITIAL_CREATE_STATE,
   type CreateApplicationState,
 } from './createApplicationState';
+import { useToast } from '@/app/components/ToastProvider';
 
 type CreateAction = (
   state: CreateApplicationState,
@@ -20,23 +21,25 @@ function AddApplicationModalContent({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { pushToast } = useToast();
   const [state, formAction, pending] = useActionState(action, INITIAL_CREATE_STATE);
 
   useEffect(() => {
     if (state.status === 'success') {
+      if (state.message) pushToast(state.message, 'success');
       onClose();
       router.refresh();
     }
-  }, [state.status, onClose, router]);
+  }, [state.message, state.status, pushToast, onClose, router]);
+
+  useEffect(() => {
+    if (state.status === 'error' && state.message) {
+      pushToast(state.message, 'error');
+    }
+  }, [state.message, state.status, pushToast]);
 
   return (
     <form action={formAction} className="grid gap-3 lg:grid-cols-2">
-      {state.status === 'error' && state.message && (
-        <p className="lg:col-span-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-          {state.message}
-        </p>
-      )}
-
       <div>
         <input className="input" name="company" placeholder="Company" required />
         {state.fieldErrors?.company && (

@@ -1,13 +1,11 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import Link from 'next/link';
 import { auth } from '@clerk/nextjs/server';
-import {
-  ClerkProvider,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-} from '@clerk/nextjs';
+import { cookies } from 'next/headers';
+import { ClerkProvider } from '@clerk/nextjs';
+import { ToastProvider } from './components/ToastProvider';
+import { ToastFromQuery } from './components/ToastFromQuery';
+import { AppShell } from './components/AppShell';
 import './globals.css';
 
 const geistSans = Geist({
@@ -38,6 +36,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const { userId } = await auth();
+  const cookieStore = await cookies();
+  const initialSidebarCollapsed =
+    cookieStore.get('sidebar-collapsed')?.value === '1';
 
   return (
     <html lang="en">
@@ -45,55 +46,15 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ClerkProvider>
-          <header className="topbar">
-            <div className="container flex items-center justify-between gap-4 py-3">
-              <div className="flex items-center gap-6">
-                <Link href="/" className="text-sm font-semibold tracking-wide">
-                  Job Tracker
-                </Link>
-                <nav className="hidden items-center gap-2 sm:flex">
-                  <Link
-                    href="/dashboard"
-                    className="btn-secondary px-3 py-1.5 text-sm"
-                  >
-                    Dashboard
-                  </Link>
-                  <Link
-                    href="/docs"
-                    className="btn-secondary px-3 py-1.5 text-sm"
-                  >
-                    Docs
-                  </Link>
-                </nav>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {userId ? (
-                  <UserButton />
-                ) : (
-                  <>
-                    <SignInButton mode="modal">
-                      <button
-                        type="button"
-                        className="btn-secondary px-3 py-1.5 text-sm"
-                      >
-                        Sign in
-                      </button>
-                    </SignInButton>
-                    <SignUpButton mode="modal">
-                      <button
-                        type="button"
-                        className="btn-primary px-3 py-1.5 text-sm"
-                      >
-                        Sign up
-                      </button>
-                    </SignUpButton>
-                  </>
-                )}
-              </div>
-            </div>
-          </header>
-          {children}
+          <ToastProvider>
+            <ToastFromQuery />
+            <AppShell
+              isSignedIn={Boolean(userId)}
+              initialCollapsed={initialSidebarCollapsed}
+            >
+              {children}
+            </AppShell>
+          </ToastProvider>
         </ClerkProvider>
       </body>
     </html>

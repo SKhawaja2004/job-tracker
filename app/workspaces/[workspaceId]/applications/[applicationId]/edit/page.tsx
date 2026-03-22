@@ -4,12 +4,16 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { ApplicationStatus } from '@/lib/generated/prisma';
 import { prisma } from '@/lib/prisma';
-import { hasWorkspaceRole, requireDbUser } from '@/lib/auth';
+import { APPLICATION_MANAGE_ROLES, hasWorkspaceRole, requireDbUser } from '@/lib/auth';
 import {
+  parseOptionalText,
   parseApplicationStatus,
   parseOptionalUrl,
   parseRequiredText,
-  safeDecodeMessage,
+  validateCompany,
+  validateLocation,
+  validateNotes,
+  validateRoleTitle,
 } from '@/lib/validation';
 
 export const metadata: Metadata = {
@@ -56,24 +60,32 @@ async function updateApplicationDetails(
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
 
-  const canManage = await hasWorkspaceRole(dbUser.id, workspaceId, [
-    'OWNER',
-    'ADMIN',
-  ]);
+  const canManage = await hasWorkspaceRole(
+    dbUser.id,
+    workspaceId,
+    APPLICATION_MANAGE_ROLES,
+  );
   if (!canManage) {
     redirect('/dashboard?msg=Not%20authorized%20for%20this%20workspace');
   }
 
   const company = parseRequiredText(formData, 'company');
   const roleTitle = parseRequiredText(formData, 'roleTitle');
-  const location = parseRequiredText(formData, 'location');
-  const notes = parseRequiredText(formData, 'notes');
+  const location = parseOptionalText(formData, 'location');
+  const notes = parseOptionalText(formData, 'notes');
   const rawJobUrl = parseRequiredText(formData, 'jobUrl');
   const jobUrl = parseOptionalUrl(formData, 'jobUrl');
 
-  if (!company || !roleTitle) {
+  const companyError = validateCompany(company);
+  const roleTitleError = validateRoleTitle(roleTitle);
+  const locationError = validateLocation(location);
+  const notesError = validateNotes(notes);
+
+  if (companyError || roleTitleError || locationError || notesError) {
+    const message =
+      companyError || roleTitleError || locationError || notesError || 'Invalid input.';
     redirect(
-      `/workspaces/${workspaceId}/applications/${applicationId}/edit?msg=Company%20and%20role%20are%20required`,
+      `/workspaces/${workspaceId}/applications/${applicationId}/edit?msg=${encodeURIComponent(message)}`,
     );
   }
 
@@ -134,15 +146,10 @@ async function updateApplicationDetails(
 
 export default async function EditApplicationPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ workspaceId: string; applicationId: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { workspaceId, applicationId } = await params;
-  const sp = (await searchParams) ?? {};
-  const msg = Array.isArray(sp.msg) ? sp.msg[0] : sp.msg;
-  const decodedMsg = safeDecodeMessage(msg);
 
   const dbUser = await requireDbUser();
   if (!dbUser) redirect('/sign-in');
@@ -211,10 +218,6 @@ export default async function EditApplicationPage({
             </div>
           </div>
         </section>
-
-        {decodedMsg && (
-          <p className="card px-4 py-3 text-sm text-slate-200">{decodedMsg}</p>
-        )}
 
         <section className="card p-6">
           <h2 className="text-lg font-semibold text-slate-100">

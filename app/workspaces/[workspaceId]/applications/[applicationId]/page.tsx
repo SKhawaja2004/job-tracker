@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireDbUser } from '@/lib/auth';
+import { parseOptionalText, validateNotes } from '@/lib/validation';
 
 export const metadata: Metadata = {
   title: 'Application Details',
@@ -62,6 +64,43 @@ export default async function ApplicationDetailPage({
   });
 
   if (!application) notFound();
+
+  async function updateNotes(formData: FormData): Promise<void> {
+    'use server';
+
+    const dbUser = await requireDbUser();
+    if (!dbUser) redirect('/sign-in');
+
+    const accessible = await prisma.application.findFirst({
+      where: {
+        id: applicationId,
+        workspaceId,
+        workspace: { memberships: { some: { userId: dbUser.id } } },
+      },
+      select: { id: true },
+    });
+
+    if (!accessible) notFound();
+
+    const notes = parseOptionalText(formData, 'notes');
+    const notesError = validateNotes(notes);
+    if (notesError) {
+      redirect(
+        `/workspaces/${workspaceId}/applications/${applicationId}?msg=${encodeURIComponent(notesError)}`,
+      );
+    }
+
+    await prisma.application.update({
+      where: { id: applicationId },
+      data: { notes: notes || null },
+    });
+
+    revalidatePath(`/workspaces/${workspaceId}/applications/${applicationId}`);
+    revalidatePath(`/workspaces/${workspaceId}/applications`);
+    redirect(
+      `/workspaces/${workspaceId}/applications/${applicationId}?msg=Notes%20saved`,
+    );
+  }
 
   return (
     <main className="page">
@@ -151,6 +190,26 @@ export default async function ApplicationDetailPage({
               {application.notes || 'No notes yet'}
             </p>
           </div>
+        </section>
+
+        <section className="card p-6">
+          <h2 className="text-lg font-semibold text-slate-100">Quick Notes</h2>
+          <p className="text-muted mt-1 text-sm">
+            Add notes directly here without opening the full edit page.
+          </p>
+          <form action={updateNotes} className="mt-4 space-y-3">
+            <textarea
+              name="notes"
+              defaultValue={application.notes ?? ''}
+              className="input min-h-36"
+              placeholder="Interview notes, company research, follow-ups..."
+            />
+            <div className="flex justify-end">
+              <button type="submit" className="btn-primary px-4 py-2 text-sm">
+                Save notes
+              </button>
+            </div>
+          </form>
         </section>
       </div>
     </main>
